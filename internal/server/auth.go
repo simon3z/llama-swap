@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/subtle"
 	"net/http"
 
 	"github.com/mostlygeek/llama-swap/internal/chain"
@@ -8,10 +9,44 @@ import (
 	"github.com/mostlygeek/llama-swap/internal/swaputil"
 )
 
+// apiKeyCookieName is the cookie the UI login page stores the API key in so
+// that every subsequent browser request - fetches, XHR, and EventSources, all
+// of which carry cookies but not all of which can set headers - is
+// authenticated.
+const apiKeyCookieName = "llamaswap_api_key"
+
+// apiKeyValid reports whether key is one of the configured API keys.
+// The comparison is constant-time: the login endpoint turns key checking
+// into a guessable oracle, and a short-circuit comparison would let a
+// network attacker recover the key byte by byte from response timing.
+func apiKeyValid(keys []string, key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, k := range keys {
+		if subtle.ConstantTimeCompare([]byte(k), []byte(key)) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// extractAPIKey pulls the presented API key from the request: the standard
+// headers first, then the UI login cookie.
+func extractAPIKey(r *http.Request) string {
+	if key := swaputil.ExtractAPIKey(r); key != "" {
+		return key
+	}
+	if cookie, err := r.Cookie(apiKeyCookieName); err == nil {
+		return cookie.Value
+	}
+	return ""
+}
+
 // CreateAuthMiddleware returns middleware that validates API keys when the
 // config declares any. It accepts the key via Authorization: Bearer,
-// Authorization: Basic (password field), or x-api-key. When no keys are
-// configured the middleware is a pass-through.
+// Authorization: Basic (password field), x-api-key, or the UI login cookie.
+// When no keys are configured the middleware is a pass-through.
 func CreateAuthMiddleware(cfg config.Config) chain.Middleware {
 	keys := cfg.RequiredAPIKeys
 	return func(next http.Handler) http.Handler {
@@ -19,16 +54,7 @@ func CreateAuthMiddleware(cfg config.Config) chain.Middleware {
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			provided := swaputil.ExtractAPIKey(r)
-
-			valid := false
-			for _, key := range keys {
-				if provided == key {
-					valid = true
-					break
-				}
-			}
-			if !valid {
+			if !apiKeyValid(keys, extractAPIKey(r)) {
 				w.Header().Set("WWW-Authenticate", `Basic realm="llama-swap"`)
 				swaputil.SendResponse(w, r, http.StatusUnauthorized, "unauthorized: invalid or missing API key")
 				return

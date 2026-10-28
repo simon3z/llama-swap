@@ -399,6 +399,13 @@ func (s *Server) routes() {
 		mux.Handle("GET "+path, modelChain.Then(dispatch))
 	}
 
+	// UI login: unauthenticated on purpose, since the login page must be
+	// reachable before the user holds any credential. It only validates a key
+	// and sets (or clears) the login cookie.
+	mux.Handle("POST /api/login", http.HandlerFunc(s.handleLogin))
+	mux.Handle("POST /api/logout", http.HandlerFunc(s.handleLogout))
+	mux.Handle("GET /api/auth-check", http.HandlerFunc(s.handleAuthCheck))
+
 	// llama-swap API + custom endpoints.
 	mux.Handle("GET /v1/models", apiChain.ThenFunc(s.handleListModels))
 	mux.Handle("GET /models", apiChain.ThenFunc(s.handleListModels))
@@ -417,7 +424,11 @@ func (s *Server) routes() {
 	mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
 		redirectRelative(w, "ui/", http.StatusPermanentRedirect)
 	})
-	mux.Handle("GET /ui/", chain.New(authMW).ThenFunc(s.handleUI))
+	// The SPA document is served without auth: the embedded assets contain no
+	// secrets, and the login page has to be reachable before the user holds
+	// any credential. Every API request stays protected; once the login page
+	// stores the key in a cookie, the auth middleware accepts it there.
+	mux.Handle("GET /ui/", http.HandlerFunc(s.handleUI))
 	// The browser fetches the web app manifest - and the icons it references -
 	// itself while deciding whether to offer installing the PWA, and it has no
 	// way to attach an API key to those requests. Serve them without auth so

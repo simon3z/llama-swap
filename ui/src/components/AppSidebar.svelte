@@ -1,6 +1,6 @@
 <script lang="ts">
   import { link } from "svelte-spa-router";
-  import { FerrisWheel, Boxes, Activity, Cat, ScrollText, Gauge, Cpu, Sun, Moon, Monitor, ChevronRight, Settings, CircleQuestionMark } from "@lucide/svelte";
+  import { FerrisWheel, Boxes, Activity, Cat, ScrollText, Gauge, Cpu, Sun, Moon, Monitor, ChevronRight, Settings, CircleQuestionMark, LogOut } from "@lucide/svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -12,6 +12,7 @@
   import { modelsMenuOpen } from "../stores/sidebar";
   import type { Model } from "../lib/types";
   import { isComposingKey } from "../lib/ime";
+  import { authRequired, logout } from "../lib/auth";
   import ConnectionStatus from "./ConnectionStatus.svelte";
   import MiddleTruncate from "./MiddleTruncate.svelte";
 
@@ -83,12 +84,24 @@
       </div>
       <h1
         contenteditable="true"
-        class="truncate pb-0 text-base font-semibold outline-none rounded-md px-1 hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden"
+        class="min-w-0 flex-1 truncate pb-0 text-base font-semibold outline-none rounded-md px-1 hover:bg-sidebar-accent group-data-[collapsible=icon]:hidden"
         onblur={handleBlur}
         onkeydown={handleKeyDown}
       >
         {$appTitle}
       </h1>
+      {#if $authRequired}
+        <Button
+          variant="ghost"
+          size="icon"
+          class="shrink-0"
+          title="Sign out"
+          onclick={() => void logout()}
+        >
+          <LogOut class="size-4" />
+          <span class="sr-only">Sign out</span>
+        </Button>
+      {/if}
     </div>
   </Sidebar.Header>
 

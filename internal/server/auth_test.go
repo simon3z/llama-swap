@@ -83,4 +83,26 @@ func TestServer_AuthMiddleware(t *testing.T) {
 			t.Error("missing WWW-Authenticate header")
 		}
 	})
+
+	t.Run("valid login cookie", func(t *testing.T) {
+		mw := CreateAuthMiddleware(cfg)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.AddCookie(&http.Cookie{Name: apiKeyCookieName, Value: "secret"})
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", w.Code)
+		}
+	})
+
+	t.Run("invalid login cookie", func(t *testing.T) {
+		mw := CreateAuthMiddleware(cfg)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.AddCookie(&http.Cookie{Name: apiKeyCookieName, Value: "wrong"})
+		w := httptest.NewRecorder()
+		mw(final).ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401", w.Code)
+		}
+	})
 }

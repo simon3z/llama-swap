@@ -26,6 +26,8 @@
   import { currentRoute } from "./stores/route";
   import { selectedPlaygroundTab, playgroundTabs } from "./stores/playground";
   import { sidebarOpen, sidebarWidth } from "./stores/sidebar";
+  import { authState, checkAuth } from "./lib/auth";
+  import Login from "./components/Login.svelte";
 
   // svelte-spa-router's types predate Svelte 5 (loadingComponent wants the
   // old class-component ComponentType); the cast is safe since Router.svelte
@@ -125,6 +127,18 @@
     currentRoute.set(loc ?? (typeof route === "string" ? route : "/"));
   }
 
+  // API events and polling start only once the auth gate passes: without the
+  // login cookie every request would 401 and the EventSource would retry-loop
+  // on the login page. They stop again when the user signs out.
+  $effect(() => {
+    if ($authState === "authed") {
+      enableAPIEvents(true);
+      void checkPerformanceEnabled();
+    } else {
+      enableAPIEvents(false);
+    }
+  });
+
   $effect(() => {
     document.documentElement.classList.toggle("dark", $isDarkMode);
   });
@@ -156,8 +170,7 @@
   onMount(() => {
     const cleanupScreenWidth = initScreenWidth();
     const cleanupSystemTheme = initSystemThemeListener();
-    enableAPIEvents(true);
-    checkPerformanceEnabled();
+    void checkAuth();
     import("./routes/Playground.svelte").then((m) => {
       PlaygroundComponent = m.default;
     });
@@ -173,31 +186,36 @@
   });
 </script>
 
-<Tooltip.Provider>
-  {#if $inferencePaused}
-    <div
-      role="status"
-      class="bg-warning text-black fixed inset-x-0 top-0 z-30 flex h-9 items-center justify-center gap-2 px-4 text-sm font-medium"
-    >
-      <Pause class="size-4 shrink-0" />
-      <span class="truncate">
-        Inference is paused.<span class="hidden sm:inline">{" "}All inference requests are rejected until you resume.</span>
-      </span>
-      <button
-        type="button"
-        class="ml-1 flex h-6 shrink-0 items-center gap-1 rounded-md border border-black/30 bg-white/80 px-2 text-xs font-medium text-black hover:bg-white disabled:opacity-60"
-        onclick={handleResume}
-        disabled={resuming}
+{#if $authState === "checking"}
+  <RouteLoading />
+{:else if $authState === "login"}
+  <Login />
+{:else}
+  <Tooltip.Provider>
+    {#if $inferencePaused}
+      <div
+        role="status"
+        class="bg-warning text-black fixed inset-x-0 top-0 z-30 flex h-9 items-center justify-center gap-2 px-4 text-sm font-medium"
       >
-        {#if resuming}
-          <Loader2 class="size-3 animate-spin" />
-        {:else}
-          <Play class="size-3" />
-        {/if}
-        Resume
-      </button>
-    </div>
-  {/if}
+        <Pause class="size-4 shrink-0" />
+        <span class="truncate">
+          Inference is paused.<span class="hidden sm:inline">{" "}All inference requests are rejected until you resume.</span>
+        </span>
+        <button
+          type="button"
+          class="ml-1 flex h-6 shrink-0 items-center gap-1 rounded-md border border-black/30 bg-white/80 px-2 text-xs font-medium text-black hover:bg-white disabled:opacity-60"
+          onclick={handleResume}
+          disabled={resuming}
+        >
+          {#if resuming}
+            <Loader2 class="size-3 animate-spin" />
+          {:else}
+            <Play class="size-3" />
+          {/if}
+          Resume
+        </button>
+      </div>
+    {/if}
   <Sidebar.Provider
     class="pt-(--banner-h)"
     style="--banner-h: {bannerHeight};"
@@ -289,4 +307,5 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
-</Tooltip.Provider>
+  </Tooltip.Provider>
+{/if}

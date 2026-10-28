@@ -2,9 +2,9 @@
 title: API keys, access control, and keeping secrets out of your config
 summary: apiKeys authentication has no per-key rate limits or user permissions; use env macros for secrets.
 category: guides
-tags: [security, api-keys, auth, secrets, env, rate-limit, users, permissions, access-control]
+tags: [security, api-keys, auth, login, secrets, env, rate-limit, users, permissions, access-control]
 config_keys: [apiKeys, macros, peers.*.apiKey, models.*.env]
-updated: 2026-08-25
+updated: 2026-10-27
 ---
 
 # API keys and keeping secrets out of your config
@@ -19,15 +19,29 @@ apiKeys:
   - "sk-hunter2"
 ```
 
-Clients may present it as `Authorization: Bearer <key>`, `x-api-key: <key>`, or
-HTTP Basic. The web UI and everything under `/api/` are covered too.
+Clients may present it as `Authorization: Bearer <key>`, `x-api-key: <key>`,
+HTTP Basic, or the UI login cookie described below. The web UI and
+everything under `/api/` are covered too.
 
-A handful of static files stay reachable without a key regardless:
-`/favicon.ico`, `/ui/site.webmanifest`, and the two icons it references
-(`/ui/web-app-manifest-192x192.png`, `/ui/web-app-manifest-512x512.png`).
-Browsers fetch all of these themselves — the favicon for the tab, the
-manifest and its icons to decide whether to offer installing llama-swap as a
-PWA — and have no way to attach your API key to those requests.
+### Logging into the web UI
+
+When `apiKeys` is set, opening the UI in a browser shows a login page
+instead of the old basic-auth popup. Enter a key from your `apiKeys` list and
+it is stored in an `httpOnly` session cookie (`llamaswap_api_key`) that every
+later request — including the `EventSource`s the UI opens, which can't set
+headers — carries automatically. The cookie is a browser session: closing the
+browser signs you out, and there is a Sign out button in the sidebar. The
+key itself is never sent in a URL, so it does not appear in access logs or
+proxy logs. Like the rest of the API, login is not throttled: the strength
+of the configured keys is the barrier. If you need throttling or lockout,
+put a proxy in front of llama-swap.
+
+The SPA document (`/ui/`) and the login endpoints (`/api/login`,
+`/api/logout`, `/api/auth-check`) are reachable without a key, because the
+login page has to load before the user holds any credential. They carry no
+secrets and only accept (or clear) a key. The static assets the browser
+fetches on its own — `/favicon.ico`, `/ui/site.webmanifest`, and the two
+manifest icons — are reachable for the same reason.
 
 Generate a real one:
 
